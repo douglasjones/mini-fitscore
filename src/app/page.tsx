@@ -15,8 +15,16 @@ interface ModalContent {
   isSuccess: boolean;
 }
 
+// Tipos para as props do componente de input
+interface QuestionInputProps {
+  label: string;
+  index: number;
+  value: number;
+  onChange: (index: number, value: number) => void;
+}
+
 // Componente de input para cada pergunta
-const QuestionInput = ({ label, index, value, onChange }) => (
+const QuestionInput = ({ label, index, value, onChange }: QuestionInputProps) => (
   <div className="flex flex-col mb-4">
     <label className="text-sm font-medium text-gray-700">{label}</label>
     <input
