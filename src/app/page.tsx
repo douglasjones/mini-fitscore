@@ -1,103 +1,238 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { collection, addDoc, Timestamp } from 'firebase/firestore';
+import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+
+import { db, auth } from '../lib/firebase';
+import Modal from '../components/Modal';
+
+// Tipos para o conteúdo do modal
+interface ModalContent {
+  title: string;
+  message: string;
+  isSuccess: boolean;
+}
+
+// Componente de input para cada pergunta
+const QuestionInput = ({ label, index, value, onChange }) => (
+  <div className="flex flex-col mb-4">
+    <label className="text-sm font-medium text-gray-700">{label}</label>
+    <input
+      type="range"
+      min="0"
+      max="10"
+      value={value}
+      onChange={(e) => onChange(index, parseInt(e.target.value))}
+      className="mt-1 w-full h-2 rounded-lg appearance-none cursor-pointer accent-blue-600"
+    />
+    <div className="flex justify-between text-xs text-gray-500 mt-1">
+      <span>0</span>
+      <span>{value}</span>
+      <span>10</span>
+    </div>
+  </div>
+);
+
+// Componente da página principal (Formulário)
+export default function FormPage() {
+  const router = useRouter();
+
+  // Estados do formulário e da UI
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [scores, setScores] = useState(Array(10).fill(5));
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [userId, setUserId] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Estados do Modal e simulação
+  const [showModal, setShowModal] = useState(false);
+  const [modalContent, setModalContent] = useState<ModalContent | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Autenticação anônima com Firebase
+  useEffect(() => {
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUserId(user.uid);
+        setIsAuthReady(true);
+      } else {
+        signInAnonymously(auth).catch((authError) => {
+          console.error("Erro de autenticação anônima:", authError);
+          setError("Falha na autenticação. Não será possível salvar os dados.");
+        });
+      }
+    });
+  }, []);
+
+  // Função para calcular a classificação
+  const getClassification = (score: number) => {
+    if (score >= 80) return 'Fit Altíssimo';
+    if (score >= 60) return 'Fit Aprovado';
+    if (score >= 40) return 'Fit Questionável';
+    return 'Fora do Perfil';
+  };
+
+  // Simulação da notificação assíncrona
+  const simulateNotification = async () => {
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Simula atraso de rede
+    console.log("Lógica 1 (Notificação de Resultado) foi acionada.");
+  };
+
+  // Handler para mudança nos scores
+  const handleScoreChange = (index: number, value: number) => {
+    const newScores = [...scores];
+    newScores[index] = value;
+    setScores(newScores);
+  };
+
+  // Handler para submissão do formulário
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAuthReady) {
+      setError("A autenticação ainda não está pronta. Tente novamente em alguns segundos.");
+      return;
+    }
+    setIsSubmitting(true);
+
+    const totalScore = scores.reduce((sum, score) => sum + score, 0);
+    const classification = getClassification(totalScore);
+    const appId = process.env.NEXT_PUBLIC_APP_ID || 'default-app-id';
+
+    try {
+      // Salva no Firestore
+      await addDoc(collection(db, `artifacts/${appId}/public/data/candidates`), {
+        name,
+        email,
+        fitScore: totalScore,
+        classification,
+        userId,
+        timestamp: Timestamp.now(),
+      });
+
+      // Simula notificação e mostra modal de sucesso
+      await simulateNotification();
+      setModalContent({
+        title: 'Avaliação Enviada com Sucesso!',
+        message: 'O candidato foi avaliado e a notificação simulada foi disparada.',
+        isSuccess: true,
+      });
+      setShowModal(true);
+
+    } catch (err) {
+      console.error("Erro ao salvar os dados:", err);
+      setModalContent({
+        title: 'Erro ao Enviar!',
+        message: `Não foi possível salvar os dados. Verifique sua conexão ou a configuração do Firebase. Detalhes: ${err.message}`,
+        isSuccess: false,
+      });
+      setShowModal(true);
+      setIsSubmitting(false);
+    }
+  };
+
+  // Fecha o modal e redireciona se o envio foi bem-sucedido
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setIsSubmitting(false); // Reseta o estado do botão
+    if (modalContent?.isSuccess) {
+      router.push('/dashboard');
+    }
+  };
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="bg-gray-50 min-h-screen font-sans antialiased text-gray-800">
+      <div className="max-w-4xl mx-auto p-4 md:p-8">
+        <header className="text-center mb-6">
+          <h1 className="text-4xl font-extrabold text-blue-600">Mini FitScore™</h1>
+          <p className="mt-2 text-gray-600">Avalie um candidato para gerar o FitScore.</p>
+        </header>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        <main className="bg-white rounded-3xl shadow-2xl overflow-hidden p-6 space-y-6">
+          {error && (
+            <div className="p-4 text-center text-red-500 font-semibold rounded-2xl bg-red-100">
+              <p>{error}</p>
+            </div>
+          )}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid md:grid-cols-2 gap-6">
+                <input
+                  type="text"
+                  placeholder="Nome do Candidato"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className="w-full p-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                />
+                <input
+                  type="email"
+                  placeholder="E-mail do Candidato"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full p-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                />
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              {/* Bloco Performance */}
+              <div className="bg-gray-50 p-6 rounded-2xl shadow-sm">
+                <h3 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">Performance</h3>
+                <QuestionInput label="Experiência" index={0} value={scores[0]} onChange={handleScoreChange} />
+                <QuestionInput label="Entregas" index={1} value={scores[1]} onChange={handleScoreChange} />
+                <QuestionInput label="Habilidades" index={2} value={scores[2]} onChange={handleScoreChange} />
+                <QuestionInput label="Problemas" index={3} value={scores[3]} onChange={handleScoreChange} />
+              </div>
+
+              {/* Bloco Energia */}
+              <div className="bg-gray-50 p-6 rounded-2xl shadow-sm">
+                <h3 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">Energia</h3>
+                <QuestionInput label="Disponibilidade" index={4} value={scores[4]} onChange={handleScoreChange} />
+                <QuestionInput label="Ritmo" index={5} value={scores[5]} onChange={handleScoreChange} />
+                <QuestionInput label="Pressão" index={6} value={scores[6]} onChange={handleScoreChange} />
+              </div>
+
+              {/* Bloco Cultura */}
+              <div className="bg-gray-50 p-6 rounded-2xl shadow-sm">
+                <h3 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">Cultura</h3>
+                <QuestionInput label="Valores" index={7} value={scores[7]} onChange={handleScoreChange} />
+                <QuestionInput label="Colaboração" index={8} value={scores[8]} onChange={handleScoreChange} />
+                <QuestionInput label="Comunicação" index={9} value={scores[9]} onChange={handleScoreChange} />
+              </div>
+            </div>
+            
+            <div className="flex justify-center pt-4">
+              <button
+                type="submit"
+                disabled={!isAuthReady || isSubmitting}
+                className="w-full md:w-auto px-8 py-3 bg-blue-600 text-white rounded-xl text-lg font-semibold hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                {isSubmitting ? 'Enviando Avaliação...' : 'Avaliar Candidato'}
+              </button>
+            </div>
+          </form>
+        </main>
+      </div>
+
+      {showModal && modalContent && (
+        <Modal onClose={handleCloseModal}>
+          <div className="text-center p-4">
+            <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full ${modalContent.isSuccess ? 'bg-green-100' : 'bg-red-100'} mb-4`}>
+              <svg className={`h-6 w-6 ${modalContent.isSuccess ? 'text-green-600' : 'text-red-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {modalContent.isSuccess ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                )}
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900">{modalContent.title}</h3>
+            <p className="mt-2 text-sm text-gray-500">{modalContent.message}</p>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
