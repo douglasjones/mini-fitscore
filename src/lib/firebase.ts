@@ -22,11 +22,11 @@ if (firebaseConfigString) {
 } else {
   console.error("Configuração do Firebase não encontrada. Verifique seu arquivo .env.local.");
   // Para evitar que a aplicação quebre completamente, podemos mockar os objetos
-  // @ts-ignore
+  // @ts-expect-error
   app = {};
-  // @ts-ignore
+  // @ts-expect-error
   auth = {};
-  // @ts-ignore
+  // @ts-expect-error
   db = {};
 }
 
