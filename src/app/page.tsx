@@ -129,11 +129,15 @@ export default function FormPage() {
       });
       setShowModal(true);
 
-    } catch (err) {
+    } catch (err: unknown) { // Explicitly type err as unknown
       console.error("Erro ao salvar os dados:", err);
+      let errorMessage = "Erro desconhecido ao salvar os dados.";
+      if (err instanceof Error) { // Type guard to check if err is an instance of Error
+        errorMessage = `Não foi possível salvar os dados. Verifique sua conexão ou a configuração do Firebase. Detalhes: ${err.message}`;
+      }
       setModalContent({
         title: 'Erro ao Enviar!',
-        message: `Não foi possível salvar os dados. Verifique sua conexão ou a configuração do Firebase. Detalhes: ${err.message}`,
+        message: errorMessage,
         isSuccess: false,
       });
       setShowModal(true);
