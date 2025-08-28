@@ -52,7 +52,7 @@ export default function FormPage() {
   const [email, setEmail] = useState('');
   const [scores, setScores] = useState(Array(10).fill(5));
   const [isAuthReady, setIsAuthReady] = useState(false);
-  const [userId, setUserId] = useState(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Estados do Modal e simulação
